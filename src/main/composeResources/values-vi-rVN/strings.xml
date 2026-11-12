@@ -568,6 +568,16 @@
     <string name="sources_signing_key_trust_title">Tin tưởng khóa mới?</string>
     <string name="sources_signing_key_trusted">Khóa đáng tin cậy</string>
     <!-- Patch Source Dialogs -->
+    <string name="patch_source_catalog_tab">Danh mục</string>
+    <string name="patch_source_custom_tab">Từ URL</string>
+    <string name="patch_source_catalog_search_placeholder">Tìm kiếm nguồn, ứng dụng hoặc bản vá…</string>
+    <string name="patch_source_catalog_loading">Đang tải danh mục nguồn…</string>
+    <string name="patch_source_catalog_error">Không thể tải danh mục nguồn</string>
+    <string name="patch_source_catalog_empty">Không tìm thấy nguồn phù hợp</string>
+    <string name="patch_source_catalog_added">Đã thêm</string>
+    <string name="patch_source_catalog_retry">Thử lại</string>
+    <string name="patch_source_catalog_patches_count">%1$d bản vá</string>
+    <string name="patch_source_catalog_apps_label">Ứng dụng: %1$s</string>
     <string name="patch_source_dialog_local_file_label">Tệp cục bộ</string>
     <string name="patch_source_dialog_name_label">Tên</string>
     <string name="patch_source_dialog_name_placeholder">Bản vá tùy chỉnh của tôi</string>

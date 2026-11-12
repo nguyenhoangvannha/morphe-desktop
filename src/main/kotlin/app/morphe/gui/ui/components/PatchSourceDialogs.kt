@@ -5,23 +5,43 @@
 
 package app.morphe.gui.ui.components
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.VerticalScrollbar
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollbarAdapter
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.morphe.engine.config.EngineConfigRepository
 import app.morphe.engine.patches.PatchBundleLoader
 import app.morphe.engine.patches.PatchProvider
 import app.morphe.engine.patches.RemotePatchSourceFactory
+import app.morphe.gui.data.model.CatalogBundle
+import app.morphe.gui.data.model.CatalogStoreApp
 import app.morphe.gui.data.model.PatchSource
+import app.morphe.gui.data.model.PatchSourceCatalog
 import app.morphe.gui.data.model.PatchSourceType
+import app.morphe.gui.data.repository.PatchSourceCatalogRepository
+import app.morphe.gui.data.repository.PatchSourceManager
+import app.morphe.gui.ui.icons.MorpheIcons
 import app.morphe.gui.ui.theme.MorpheTheme
+import app.morphe.gui.util.AvatarLoader
 import app.morphe.gui.util.MorpheFilePicker
 import app.morphe.gui.util.PatchSourceNaming
 import app.morphe.morphe_desktop.generated.resources.*
+import io.ktor.client.HttpClient
 import java.io.File
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
@@ -30,18 +50,45 @@ import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.koinInject
 
+private enum class AddSourceTab {
+    CATALOG,
+    REMOTE,
+    LOCAL,
+}
+
 @Composable
 internal fun AddPatchSourceDialog(
     onDismiss: () -> Unit,
     onAdd: (PatchSource) -> Unit
 ) {
     val form = remember { PatchSourceFormState() }
-    var sourceType by remember { mutableStateOf(PatchSourceType.GITHUB) }
+    var activeTab by remember { mutableStateOf(AddSourceTab.CATALOG) }
     val engineConfigRepository: EngineConfigRepository = koinInject()
+    val patchSourceManager: PatchSourceManager = koinInject()
+    val catalogRepository: PatchSourceCatalogRepository = koinInject()
+    val httpClient: HttpClient = koinInject()
     val scope = rememberCoroutineScope()
     val localConfig = rememberLocalSourceConfig(engineConfigRepository)
     val developerOptions = localConfig.developerOptions
     val lastLocalPatchDir = localConfig.lastLocalPatchDir
+
+    val allExistingSources by patchSourceManager.allSources.collectAsState()
+
+    var searchQuery by remember { mutableStateOf("") }
+    var catalogState by remember { mutableStateOf<Result<PatchSourceCatalog>?>(null) }
+    var isLoadingCatalog by remember { mutableStateOf(false) }
+
+    fun loadCatalog(forceRefresh: Boolean = false) {
+        scope.launch {
+            isLoadingCatalog = true
+            catalogState = runCatching { catalogRepository.getCatalog(forceRefresh) }
+            isLoadingCatalog = false
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        loadCatalog()
+    }
 
     MorpheAlertDialog(
         onDismiss = onDismiss,
@@ -52,30 +99,160 @@ internal fun AddPatchSourceDialog(
                 color = MaterialTheme.colorScheme.onSurface,
             )
         },
+        maxWidth = 620.dp,
         text = {
             Column(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.widthIn(min = 300.dp)
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf(PatchSourceType.GITHUB, PatchSourceType.LOCAL).forEach { type ->
-                        val isSelected = sourceType == type
-                        val label = when (type) {
-                            // Remote tab covers both GitHub and GitLab sources.
-                            PatchSourceType.GITHUB -> stringResource(Res.string.source_sheet_remote_label)
-                            PatchSourceType.LOCAL -> stringResource(Res.string.patch_source_dialog_local_file_label)
-                            else -> ""
+                    AddSourceTab.entries.forEach { tab ->
+                        val isSelected = activeTab == tab
+                        val label = when (tab) {
+                            AddSourceTab.CATALOG -> stringResource(Res.string.patch_source_catalog_tab)
+                            AddSourceTab.REMOTE -> stringResource(Res.string.patch_source_custom_tab)
+                            AddSourceTab.LOCAL -> stringResource(Res.string.patch_source_dialog_local_file_label)
                         }
                         MorpheChoiceChip(
                             text = label,
                             active = isSelected,
-                            onClick = { sourceType = type },
+                            onClick = { activeTab = tab },
                         )
                     }
                 }
 
-                when (sourceType) {
-                    PatchSourceType.GITHUB -> {
+                when (activeTab) {
+                    AddSourceTab.CATALOG -> {
+                        SlimSearchField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            placeholder = stringResource(Res.string.patch_source_catalog_search_placeholder),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+
+                        val catalog = catalogState?.getOrNull()
+                        val filteredBundles = remember(catalog, searchQuery) {
+                            if (catalog != null) {
+                                catalogRepository.filterBundles(catalog.bundles, catalog.store, searchQuery)
+                            } else emptyList()
+                        }
+
+                        val borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 220.dp, max = 380.dp)
+                                .clip(MorpheTheme.shapes.small)
+                                .border(1.dp, borderColor, MorpheTheme.shapes.small)
+                                .padding(4.dp)
+                        ) {
+                            when {
+                                isLoadingCatalog -> {
+                                    Box(
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Column(
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(24.dp),
+                                                color = MorpheTheme.colors.primary,
+                                                strokeWidth = 2.dp
+                                            )
+                                            Text(
+                                                text = stringResource(Res.string.patch_source_catalog_loading),
+                                                style = MorpheTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                }
+                                catalogState?.isFailure == true -> {
+                                    Box(
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Column(
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Text(
+                                                text = stringResource(Res.string.patch_source_catalog_error),
+                                                style = MorpheTheme.typography.bodySmall,
+                                                color = MorpheTheme.colors.danger
+                                            )
+                                            MorpheButton(
+                                                label = stringResource(Res.string.patch_source_catalog_retry),
+                                                size = MorpheButtonSize.COMPACT,
+                                                variant = MorpheButtonVariant.OUTLINED,
+                                                onClick = { loadCatalog(forceRefresh = true) }
+                                            )
+                                        }
+                                    }
+                                }
+                                filteredBundles.isEmpty() -> {
+                                    Box(
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = stringResource(Res.string.patch_source_catalog_empty),
+                                            style = MorpheTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                                else -> {
+                                    val listState = rememberLazyListState()
+                                    Box(modifier = Modifier.fillMaxSize()) {
+                                        LazyColumn(
+                                            state = listState,
+                                            modifier = Modifier.fillMaxSize().padding(end = 8.dp),
+                                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            items(filteredBundles, key = { it.repo }) { bundle ->
+                                                CatalogBundleItem(
+                                                    bundle = bundle,
+                                                    store = catalog?.store ?: emptyMap(),
+                                                    isAdded = isBundleAdded(bundle, allExistingSources),
+                                                    httpClient = httpClient,
+                                                    onAdd = {
+                                                        val provider = if (bundle.source.equals("gitlab", ignoreCase = true)) {
+                                                            PatchSourceType.GITLAB
+                                                        } else {
+                                                            PatchSourceType.GITHUB
+                                                        }
+                                                        val canonicalUrl = if (provider == PatchSourceType.GITLAB) {
+                                                            "https://gitlab.com/${bundle.repo}"
+                                                        } else {
+                                                            "https://github.com/${bundle.repo}"
+                                                        }
+                                                        onAdd(PatchSource(
+                                                            id = UUID.randomUUID().toString(),
+                                                            name = bundle.name.ifBlank { bundle.repo },
+                                                            type = provider,
+                                                            url = canonicalUrl,
+                                                            deletable = true,
+                                                            enabled = true,
+                                                            usePreRelease = false,
+                                                        ))
+                                                    }
+                                                )
+                                            }
+                                        }
+                                        VerticalScrollbar(
+                                            modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                                            adapter = rememberScrollbarAdapter(listState),
+                                            style = MorpheScrollbarStyle()
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    AddSourceTab.REMOTE -> {
                         LabeledField(label = stringResource(Res.string.patch_source_dialog_repo_url_label)) {
                             SlimTextField(
                                 value = form.url,
@@ -104,7 +281,7 @@ internal fun AddPatchSourceDialog(
                             }
                         }
                     }
-                    PatchSourceType.LOCAL -> {
+                    AddSourceTab.LOCAL -> {
                         LocalSourceRow(
                             filePath = form.filePath,
                             developerOptions = developerOptions,
@@ -117,81 +294,226 @@ internal fun AddPatchSourceDialog(
                             },
                         )
                     }
-                    else -> {}
                 }
 
-                form.error?.let {
-                    Text(
-                        text = it,
-                        style = MorpheTheme.typography.labelSmall,
-                        color = MorpheTheme.colors.danger
-                    )
+                if (activeTab != AddSourceTab.CATALOG) {
+                    form.error?.let {
+                        Text(
+                            text = it,
+                            style = MorpheTheme.typography.labelSmall,
+                            color = MorpheTheme.colors.danger
+                        )
+                    }
                 }
             }
         },
         confirmButton = {
-            val errInvalidUrl = stringResource(Res.string.patch_source_dialog_error_invalid_url)
-            val errInvalidFile = stringResource(Res.string.patch_source_dialog_error_invalid_file)
-            MorpheButton(
-                label = stringResource(Res.string.patch_source_dialog_add_button),
-                onClick = {
-                    when (sourceType) {
-                        PatchSourceType.GITHUB -> {
-                            // Resolve actual provider (GitHub vs GitLab) from the entered URL.
-                            val resolved = resolveRemoteSourceUrl(form.url.trim())
-                            if (resolved == null) {
-                                form.error = errInvalidUrl; return@MorpheButton
-                            }
-                            val resolvedName = form.name.trim().ifBlank {
-                                PatchSourceNaming.suggestNameFromUrl(form.url.trim()) ?: "Unnamed"
-                            }
-                            onAdd(PatchSource(
-                                id = UUID.randomUUID().toString(),
-                                name = resolvedName,
-                                type = resolved.provider,
-                                url = resolved.canonicalUrl,
-                                deletable = true,
-                                usePreRelease = form.usePreRelease
-                            ))
-                            return@MorpheButton
-                        }
-                        PatchSourceType.LOCAL -> {
-                            if (form.filePath.isBlank() || !File(form.filePath).exists()) {
-                                form.error = errInvalidFile; return@MorpheButton
-                            }
-                            val localFile = File(form.filePath)
-                            scope.launch {
+            if (activeTab != AddSourceTab.CATALOG) {
+                val errInvalidUrl = stringResource(Res.string.patch_source_dialog_error_invalid_url)
+                val errInvalidFile = stringResource(Res.string.patch_source_dialog_error_invalid_file)
+                MorpheButton(
+                    label = stringResource(Res.string.patch_source_dialog_add_button),
+                    onClick = {
+                        when (activeTab) {
+                            AddSourceTab.REMOTE -> {
+                                val resolved = resolveRemoteSourceUrl(form.url.trim())
+                                if (resolved == null) {
+                                    form.error = errInvalidUrl; return@MorpheButton
+                                }
                                 val resolvedName = form.name.trim().ifBlank {
-                                    withContext(Dispatchers.IO) { PatchBundleLoader.extractName(localFile) }
-                                        ?: localFile.nameWithoutExtension
+                                    PatchSourceNaming.suggestNameFromUrl(form.url.trim()) ?: "Unnamed"
                                 }
                                 onAdd(PatchSource(
                                     id = UUID.randomUUID().toString(),
                                     name = resolvedName,
-                                    type = sourceType,
-                                    url = null,
-                                    filePath = form.filePath.trim(),
+                                    type = resolved.provider,
+                                    url = resolved.canonicalUrl,
                                     deletable = true,
                                     usePreRelease = form.usePreRelease
                                 ))
+                                return@MorpheButton
                             }
+                            AddSourceTab.LOCAL -> {
+                                if (form.filePath.isBlank() || !File(form.filePath).exists()) {
+                                    form.error = errInvalidFile; return@MorpheButton
+                                }
+                                val localFile = File(form.filePath)
+                                scope.launch {
+                                    val resolvedName = form.name.trim().ifBlank {
+                                        withContext(Dispatchers.IO) { PatchBundleLoader.extractName(localFile) }
+                                            ?: localFile.nameWithoutExtension
+                                    }
+                                    onAdd(PatchSource(
+                                        id = UUID.randomUUID().toString(),
+                                        name = resolvedName,
+                                        type = PatchSourceType.LOCAL,
+                                        url = null,
+                                        filePath = form.filePath.trim(),
+                                        deletable = true,
+                                        usePreRelease = form.usePreRelease
+                                    ))
+                                }
+                            }
+                            else -> {}
                         }
-                        else -> {}
-                    }
-                },
-                variant = MorpheButtonVariant.PRIMARY,
-                size = MorpheButtonSize.COMPACT,
-            )
+                    },
+                    variant = MorpheButtonVariant.PRIMARY,
+                    size = MorpheButtonSize.COMPACT,
+                )
+            }
         },
         dismissButton = {
             MorpheButton(
-                label = stringResource(Res.string.cancel),
+                label = stringResource(if (activeTab == AddSourceTab.CATALOG) Res.string.close else Res.string.cancel),
                 onClick = onDismiss,
                 variant = MorpheButtonVariant.GHOST,
                 size = MorpheButtonSize.COMPACT,
             )
         }
     )
+}
+
+@Composable
+private fun CatalogBundleItem(
+    bundle: CatalogBundle,
+    store: Map<String, CatalogStoreApp>,
+    isAdded: Boolean,
+    httpClient: HttpClient,
+    onAdd: () -> Unit,
+) {
+    var avatarBitmap by remember(bundle.avatarUrl) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(bundle.avatarUrl) {
+        val url = bundle.avatarUrl
+        if (!url.isNullOrBlank()) {
+            avatarBitmap = AvatarLoader.loadAvatar(url, httpClient)
+        }
+    }
+
+    val shapes = MorpheTheme.shapes
+    val colors = MorpheTheme.colors
+    val appNames = remember(bundle.targetApps, store) {
+        bundle.targetApps.map { store[it]?.name ?: it }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shapes.small)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f), shapes.small)
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f))
+            .padding(10.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            val bitmap = avatarBitmap
+            if (bitmap != null) {
+                Image(
+                    bitmap = bitmap,
+                    contentDescription = null,
+                    modifier = Modifier.size(36.dp).clip(CircleShape)
+                )
+            } else {
+                MorpheAppAvatar(
+                    name = bundle.name.ifBlank { bundle.repo },
+                    size = MorpheAvatarSize.MEDIUM,
+                )
+            }
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = bundle.name.ifBlank { bundle.repo },
+                        style = MorpheTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (bundle.stars > 0) {
+                        Text(
+                            text = "★ ${bundle.stars}",
+                            style = MorpheTheme.typography.labelSmall,
+                            color = colors.warning,
+                        )
+                    }
+                    if (bundle.patchCount > 0) {
+                        Text(
+                            text = stringResource(Res.string.patch_source_catalog_patches_count, bundle.patchCount),
+                            style = MorpheTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+
+                Text(
+                    text = bundle.repo,
+                    style = MorpheTheme.typography.labelSmall,
+                    color = colors.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+
+                if (!bundle.repoDescription.isNullOrBlank()) {
+                    Text(
+                        text = bundle.repoDescription,
+                        style = MorpheTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                } else if (appNames.isNotEmpty()) {
+                    val appsDisplay = if (appNames.size > 3) {
+                        appNames.take(3).joinToString(", ") + " +${appNames.size - 3}"
+                    } else {
+                        appNames.joinToString(", ")
+                    }
+                    Text(
+                        text = stringResource(Res.string.patch_source_catalog_apps_label, appsDisplay),
+                        style = MorpheTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+
+            if (isAdded) {
+                MorpheChoiceChip(
+                    text = stringResource(Res.string.patch_source_catalog_added),
+                    active = true,
+                    icon = MorpheIcons.Check,
+                    onClick = {},
+                )
+            } else {
+                MorpheButton(
+                    label = stringResource(Res.string.patch_source_dialog_add_button),
+                    variant = MorpheButtonVariant.PRIMARY,
+                    size = MorpheButtonSize.COMPACT,
+                    onClick = onAdd,
+                )
+            }
+        }
+    }
+}
+
+private fun isBundleAdded(bundle: CatalogBundle, existingSources: List<PatchSource>): Boolean {
+    val targetRepo = bundle.repo.trim().lowercase()
+    return existingSources.any { src ->
+        if (src.type == PatchSourceType.DEFAULT && RemotePatchSourceFactory.DEFAULT_REPO_PATH.lowercase() == targetRepo) {
+            true
+        } else {
+            val parsed = src.url?.let(RemotePatchSourceFactory::parse)
+            parsed != null && parsed.repoPath.lowercase() == targetRepo
+        }
+    }
 }
 
 @Composable

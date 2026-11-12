@@ -589,6 +589,16 @@
     <string name="sources_signing_key_trusted">Trusted key</string>
 
     <!-- Patch Source Dialogs -->
+    <string name="patch_source_catalog_tab">Catalog</string>
+    <string name="patch_source_custom_tab">Custom URL</string>
+    <string name="patch_source_catalog_search_placeholder">Search sources, apps, or patches…</string>
+    <string name="patch_source_catalog_loading">Loading catalog…</string>
+    <string name="patch_source_catalog_error">Failed to load catalog</string>
+    <string name="patch_source_catalog_empty">No sources found</string>
+    <string name="patch_source_catalog_added">Added</string>
+    <string name="patch_source_catalog_retry">Retry</string>
+    <string name="patch_source_catalog_patches_count">%1$d patches</string>
+    <string name="patch_source_catalog_apps_label">Apps: %1$s</string>
     <string name="patch_source_dialog_local_file_label">Local file</string>
     <string name="patch_source_dialog_name_label">Name</string>
     <string name="patch_source_dialog_name_placeholder">My Custom Patches</string>

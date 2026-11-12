@@ -1,3 +1,10 @@
+# [2.2.0](https://github.com/nguyenhoangvannha/morphe-desktop/compare/v2.1.1...v2.2.0) (2026-11-12)
+
+
+### Features
+
+* Add search to add patch source dialog using online catalog
+
 ## [2.1.1](https://github.com/MorpheApp/morphe-desktop/compare/v2.1.0...v2.1.1) (2026-11-06)
 
 

@@ -14,6 +14,7 @@ import app.morphe.engine.util.Logger
 import app.morphe.gui.data.repository.ChangelogRepository
 import app.morphe.gui.data.repository.ConfigRepository
 import app.morphe.gui.data.repository.LanguageRepository
+import app.morphe.gui.data.repository.PatchSourceCatalogRepository
 import app.morphe.gui.data.repository.SeenPatchesRepository
 import app.morphe.gui.data.repository.PatchSourceManager
 import app.morphe.gui.data.repository.UpdateCheckRepository
@@ -52,6 +53,7 @@ val appModule = module {
     single { PatchSourceManager(get(), get()) }
     single { UpdateCheckRepository(get()) }
     single { ChangelogRepository(get()) }
+    single { PatchSourceCatalogRepository(get()) }
     single { PatchedAppStore.shared }
 
     viewModel {
