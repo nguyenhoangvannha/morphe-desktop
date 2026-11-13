@@ -8,6 +8,7 @@ package app.morphe.gui.data.repository
 import app.morphe.engine.network.HttpService
 import app.morphe.engine.util.Logger
 import app.morphe.gui.data.model.CatalogBundle
+import app.morphe.gui.data.model.CatalogAppGroup
 import app.morphe.gui.data.model.CatalogStoreApp
 import app.morphe.gui.data.model.PatchSourceCatalog
 import io.ktor.client.HttpClient
@@ -67,6 +68,44 @@ class PatchSourceCatalogRepository(
                 throw e
             }
         }
+    }
+
+    /** Groups sources by target app, giving app search terms priority over source metadata. */
+    fun filterAppGroups(catalog: PatchSourceCatalog, query: String): List<CatalogAppGroup> {
+        val grouped = linkedMapOf<String?, MutableList<CatalogBundle>>()
+        catalog.bundles.forEach { bundle ->
+            val packages = bundle.targetApps.filter { it.isNotBlank() }.distinct()
+            if (packages.isEmpty()) {
+                grouped.getOrPut(null) { mutableListOf() }.add(bundle)
+            } else {
+                packages.forEach { grouped.getOrPut(it) { mutableListOf() }.add(bundle) }
+            }
+        }
+        val groups = grouped.map { (packageName, bundles) ->
+            CatalogAppGroup(
+                packageName = packageName,
+                name = catalog.store[packageName]?.name?.takeIf { it.isNotBlank() } ?: packageName.orEmpty(),
+                bundles = bundles,
+            )
+        }
+        val keywords = query.trim().lowercase().split(Regex("\\s+")).filter { it.isNotBlank() }
+        fun CatalogAppGroup.matchesApp(keyword: String): Boolean =
+            packageName != null && (name.contains(keyword, ignoreCase = true) ||
+                packageName.contains(keyword, ignoreCase = true))
+
+        // Once a term identifies an app, do not show sibling apps from a multi-app source.
+        val appKeywords = keywords.filter { keyword -> groups.any { it.matchesApp(keyword) } }
+        val sourceQuery = keywords.filterNot { it in appKeywords }.joinToString(" ")
+        return groups.mapNotNull { group ->
+            if (!appKeywords.all { group.matchesApp(it) }) return@mapNotNull null
+            val bundles = filterBundles(group.bundles, catalog.store, sourceQuery)
+            group.copy(bundles = bundles).takeIf { bundles.isNotEmpty() }
+        }.sortedWith(
+            compareBy<CatalogAppGroup> { it.packageName == null }
+                .thenByDescending { it.bundles.size }
+                .thenBy { it.name.lowercase() }
+                .thenBy { it.packageName }
+        )
     }
 
     /**

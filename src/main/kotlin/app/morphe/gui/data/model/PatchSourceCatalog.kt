@@ -43,3 +43,9 @@ data class CatalogStoreApp(
     val category: String? = null,
     val description: String? = null,
 )
+
+data class CatalogAppGroup(
+    val packageName: String?,
+    val name: String,
+    val bundles: List<CatalogBundle>,
+)

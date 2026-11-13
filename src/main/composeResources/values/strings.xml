@@ -591,10 +591,10 @@
     <!-- Patch Source Dialogs -->
     <string name="patch_source_catalog_tab">Catalog</string>
     <string name="patch_source_custom_tab">Custom URL</string>
-    <string name="patch_source_catalog_search_placeholder">Search sources, apps, or patches…</string>
+    <string name="patch_source_catalog_search_placeholder">Search apps or patches…</string>
     <string name="patch_source_catalog_loading">Loading catalog…</string>
     <string name="patch_source_catalog_error">Failed to load catalog</string>
-    <string name="patch_source_catalog_empty">No sources found</string>
+    <string name="patch_source_catalog_empty">No matching apps or sources found</string>
     <string name="patch_source_catalog_added">Added</string>
     <string name="patch_source_catalog_retry">Retry</string>
     <string name="patch_source_catalog_patches_count">%1$d patches</string>
@@ -875,4 +875,6 @@
     <!-- Navigation Pill -->
     <string name="nav_sources">Sources</string>
     <string name="nav_apps">Apps</string>
+    <string name="patch_source_catalog_other_apps">Sources without app information</string>
+    <string name="patch_source_catalog_sources_count">%1$d sources</string>
 </resources>

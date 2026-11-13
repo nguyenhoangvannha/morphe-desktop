@@ -63,6 +63,69 @@ class PatchSourceCatalogRepositoryTest {
 
     private val dummyRepo = PatchSourceCatalogRepository(createHttpClient(json))
 
+    private val socialCatalog = PatchSourceCatalog(
+        store = mapOf(
+            "com.instagram.android" to CatalogStoreApp(name = "Instagram"),
+            "com.facebook.katana" to CatalogStoreApp(name = "Facebook"),
+            "com.facebook.lite" to CatalogStoreApp(name = "Facebook"),
+        ),
+        bundles = listOf(
+            CatalogBundle(
+                repo = "owner/social",
+                name = "Social patches",
+                targetApps = listOf("com.instagram.android", "com.facebook.katana", "com.instagram.android"),
+                stars = 10,
+                patches = listOf(CatalogPatch(name = "Remove ads")),
+            ),
+            CatalogBundle(repo = "owner/photos", targetApps = listOf("com.instagram.android"), stars = 20),
+            CatalogBundle(repo = "owner/lite", targetApps = listOf("com.facebook.lite")),
+            CatalogBundle(repo = "owner/unknown", targetApps = listOf("com.unknown.app")),
+            CatalogBundle(repo = "owner/general"),
+        ),
+    )
+
+    @Test
+    fun `groups multi-app sources once per package and sorts sources by stars`() {
+        val groups = dummyRepo.filterAppGroups(socialCatalog, "")
+        assertEquals("Instagram", groups.first().name)
+        assertEquals(listOf("owner/photos", "owner/social"), groups.first().bundles.map { it.repo })
+        assertEquals(2, groups.count { it.name == "Facebook" })
+        assertEquals("com.unknown.app", groups.first { it.packageName == "com.unknown.app" }.name)
+        assertEquals(listOf("owner/general"), groups.last().bundles.map { it.repo })
+        assertEquals(null, groups.last().packageName)
+    }
+
+    @Test
+    fun `app search excludes sibling apps supported by the same source`() {
+        val groups = dummyRepo.filterAppGroups(socialCatalog, " INSTAGRAM ")
+        assertEquals(listOf("com.instagram.android"), groups.map { it.packageName })
+        assertEquals(2, groups.single().bundles.size)
+    }
+
+    @Test
+    fun `app search combines app name with patch or source terms`() {
+        val groups = dummyRepo.filterAppGroups(socialCatalog, "instagram ads")
+        assertEquals("com.instagram.android", groups.single().packageName)
+        assertEquals(listOf("owner/social"), groups.single().bundles.map { it.repo })
+        assertTrue(dummyRepo.filterAppGroups(socialCatalog, "instagram nonexistent").isEmpty())
+    }
+
+    @Test
+    fun `package search distinguishes apps sharing the same display name`() {
+        val groups = dummyRepo.filterAppGroups(socialCatalog, "com.facebook.lite")
+        assertEquals("com.facebook.lite", groups.single().packageName)
+        assertEquals("owner/lite", groups.single().bundles.single().repo)
+    }
+
+    @Test
+    fun `source and patch search still find all supported apps`() {
+        val groups = dummyRepo.filterAppGroups(socialCatalog, "ads")
+        assertEquals(setOf("com.instagram.android", "com.facebook.katana"), groups.map { it.packageName }.toSet())
+        assertTrue(groups.all { it.bundles.single().repo == "owner/social" })
+        assertEquals("owner/general", dummyRepo.filterAppGroups(socialCatalog, "owner/general")
+            .single().bundles.single().repo)
+    }
+
     @Test
     fun `empty query returns all bundles ordered by stars`() {
         val results = dummyRepo.filterBundles(sampleBundles, sampleStore, "")

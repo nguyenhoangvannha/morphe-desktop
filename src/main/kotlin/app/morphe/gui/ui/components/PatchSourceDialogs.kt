@@ -20,6 +20,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -28,6 +29,7 @@ import app.morphe.engine.config.EngineConfigRepository
 import app.morphe.engine.patches.PatchBundleLoader
 import app.morphe.engine.patches.PatchProvider
 import app.morphe.engine.patches.RemotePatchSourceFactory
+import app.morphe.gui.data.model.CatalogAppGroup
 import app.morphe.gui.data.model.CatalogBundle
 import app.morphe.gui.data.model.CatalogStoreApp
 import app.morphe.gui.data.model.PatchSource
@@ -131,11 +133,13 @@ internal fun AddPatchSourceDialog(
                         )
 
                         val catalog = catalogState?.getOrNull()
-                        val filteredBundles = remember(catalog, searchQuery) {
+                        val appGroups = remember(catalog, searchQuery) {
                             if (catalog != null) {
-                                catalogRepository.filterBundles(catalog.bundles, catalog.store, searchQuery)
+                                catalogRepository.filterAppGroups(catalog, searchQuery)
                             } else emptyList()
                         }
+
+                        val expandedApps = remember(searchQuery) { mutableStateMapOf<String?, Boolean>() }
 
                         val borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
                         Box(
@@ -192,7 +196,7 @@ internal fun AddPatchSourceDialog(
                                         }
                                     }
                                 }
-                                filteredBundles.isEmpty() -> {
+                                appGroups.isEmpty() -> {
                                     Box(
                                         modifier = Modifier.fillMaxSize(),
                                         contentAlignment = Alignment.Center
@@ -212,34 +216,46 @@ internal fun AddPatchSourceDialog(
                                             modifier = Modifier.fillMaxSize().padding(end = 8.dp),
                                             verticalArrangement = Arrangement.spacedBy(6.dp)
                                         ) {
-                                            items(filteredBundles, key = { it.repo }) { bundle ->
-                                                CatalogBundleItem(
-                                                    bundle = bundle,
-                                                    store = catalog?.store ?: emptyMap(),
-                                                    isAdded = isBundleAdded(bundle, allExistingSources),
-                                                    httpClient = httpClient,
-                                                    onAdd = {
-                                                        val provider = if (bundle.source.equals("gitlab", ignoreCase = true)) {
-                                                            PatchSourceType.GITLAB
-                                                        } else {
-                                                            PatchSourceType.GITHUB
-                                                        }
-                                                        val canonicalUrl = if (provider == PatchSourceType.GITLAB) {
-                                                            "https://gitlab.com/${bundle.repo}"
-                                                        } else {
-                                                            "https://github.com/${bundle.repo}"
-                                                        }
-                                                        onAdd(PatchSource(
-                                                            id = UUID.randomUUID().toString(),
-                                                            name = bundle.name.ifBlank { bundle.repo },
-                                                            type = provider,
-                                                            url = canonicalUrl,
-                                                            deletable = true,
-                                                            enabled = true,
-                                                            usePreRelease = false,
-                                                        ))
+                                            appGroups.forEach { group ->
+                                                val expanded = expandedApps[group.packageName] ?: searchQuery.isNotBlank()
+                                                item(key = "app:${group.packageName}") {
+                                                    CatalogAppHeader(
+                                                        group = group,
+                                                        expanded = expanded,
+                                                        onClick = { expandedApps[group.packageName] = !expanded },
+                                                    )
+                                                }
+                                                if (expanded) {
+                                                    items(group.bundles, key = { "${group.packageName}:${it.source}:${it.repo}" }) { bundle ->
+                                                        CatalogBundleItem(
+                                                            bundle = bundle,
+                                                            store = catalog?.store ?: emptyMap(),
+                                                            isAdded = isBundleAdded(bundle, allExistingSources),
+                                                            httpClient = httpClient,
+                                                            onAdd = {
+                                                                val provider = if (bundle.source.equals("gitlab", ignoreCase = true)) {
+                                                                    PatchSourceType.GITLAB
+                                                                } else {
+                                                                    PatchSourceType.GITHUB
+                                                                }
+                                                                val canonicalUrl = if (provider == PatchSourceType.GITLAB) {
+                                                                    "https://gitlab.com/${bundle.repo}"
+                                                                } else {
+                                                                    "https://github.com/${bundle.repo}"
+                                                                }
+                                                                onAdd(PatchSource(
+                                                                    id = UUID.randomUUID().toString(),
+                                                                    name = bundle.name.ifBlank { bundle.repo },
+                                                                    type = provider,
+                                                                    url = canonicalUrl,
+                                                                    deletable = true,
+                                                                    enabled = true,
+                                                                    usePreRelease = false,
+                                                                ))
+                                                            }
+                                                        )
                                                     }
-                                                )
+                                                }
                                             }
                                         }
                                         VerticalScrollbar(
@@ -371,6 +387,59 @@ internal fun AddPatchSourceDialog(
             )
         }
     )
+}
+
+@Composable
+private fun CatalogAppHeader(
+    group: CatalogAppGroup,
+    expanded: Boolean,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        shape = MorpheTheme.shapes.small,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            MorpheAppAvatar(
+                name = group.name.ifBlank { stringResource(Res.string.patch_source_catalog_other_apps) },
+                size = MorpheAvatarSize.MEDIUM,
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = group.name.ifBlank { stringResource(Res.string.patch_source_catalog_other_apps) },
+                    style = MorpheTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                group.packageName?.let { packageName ->
+                    Text(
+                        text = packageName,
+                        style = MorpheTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Text(
+                    text = stringResource(Res.string.patch_source_catalog_sources_count, group.bundles.size),
+                    style = MorpheTheme.typography.labelSmall,
+                    color = MorpheTheme.colors.primary,
+                )
+            }
+            Icon(
+                imageVector = MorpheIcons.ExpandMore,
+                contentDescription = stringResource(if (expanded) Res.string.collapse else Res.string.expand),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp).rotate(if (expanded) 180f else 0f),
+            )
+        }
+    }
 }
 
 @Composable
