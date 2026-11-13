@@ -1,3 +1,10 @@
+# [2.4.0](https://github.com/nguyenhoangvannha/morphe-desktop/compare/v2.3.2...v2.4.0) (2026-11-13)
+
+
+### Features
+
+* group source catalog search by target app ([4255e5e](https://github.com/nguyenhoangvannha/morphe-desktop/commit/4255e5eef3d8e0671299297d82e56650a67822d4))
+
 ## [2.3.2](https://github.com/nguyenhoangvannha/morphe-desktop/compare/v2.3.1...v2.3.2) (2026-11-13)
 
 
