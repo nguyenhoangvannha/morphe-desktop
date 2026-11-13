@@ -1,3 +1,10 @@
+# [2.3.0](https://github.com/nguyenhoangvannha/morphe-desktop/compare/v2.2.0...v2.3.0) (2026-11-13)
+
+
+### Features
+
+* attach bundled macOS apps to GitHub releases ([d6543e1](https://github.com/nguyenhoangvannha/morphe-desktop/commit/d6543e1dedf8983af903ab37d6070aa1d140a35f))
+
 # [2.2.0](https://github.com/nguyenhoangvannha/morphe-desktop/compare/v2.1.1...v2.2.0) (2026-11-12)
 
 
