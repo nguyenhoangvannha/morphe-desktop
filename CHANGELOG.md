@@ -1,3 +1,10 @@
+## [2.3.1](https://github.com/nguyenhoangvannha/morphe-desktop/compare/v2.3.0...v2.3.1) (2026-11-13)
+
+
+### Bug Fixes
+
+* show target app names in source catalog items ([87e662a](https://github.com/nguyenhoangvannha/morphe-desktop/commit/87e662a4d3eae813730b5fa7d72cddfb45365c69))
+
 # [2.3.0](https://github.com/nguyenhoangvannha/morphe-desktop/compare/v2.2.0...v2.3.0) (2026-11-13)
 
 
