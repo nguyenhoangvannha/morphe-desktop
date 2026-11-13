@@ -154,6 +154,7 @@ tasks {
     }
 
     processResources {
+        inputs.property("projectVersion", project.version.toString())
         // Make sure the licenses are generated before the resources are processed
         dependsOn("exportLibraryDefinitions", writeMorpheComponents)
         from(layout.buildDirectory.file("generated/aboutLibraries/aboutlibraries.json"))
