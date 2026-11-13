@@ -461,15 +461,7 @@ private fun CatalogBundleItem(
                     overflow = TextOverflow.Ellipsis,
                 )
 
-                if (!bundle.repoDescription.isNullOrBlank()) {
-                    Text(
-                        text = bundle.repoDescription,
-                        style = MorpheTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                } else if (appNames.isNotEmpty()) {
+                if (appNames.isNotEmpty()) {
                     val appsDisplay = if (appNames.size > 3) {
                         appNames.take(3).joinToString(", ") + " +${appNames.size - 3}"
                     } else {
@@ -477,6 +469,16 @@ private fun CatalogBundleItem(
                     }
                     Text(
                         text = stringResource(Res.string.patch_source_catalog_apps_label, appsDisplay),
+                        style = MorpheTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+
+                if (!bundle.repoDescription.isNullOrBlank()) {
+                    Text(
+                        text = bundle.repoDescription,
                         style = MorpheTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
