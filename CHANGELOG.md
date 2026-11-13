@@ -1,3 +1,10 @@
+## [2.3.2](https://github.com/nguyenhoangvannha/morphe-desktop/compare/v2.3.1...v2.3.2) (2026-11-13)
+
+
+### Bug Fixes
+
+* finish releases without a dev backmerge branch ([7bfdd58](https://github.com/nguyenhoangvannha/morphe-desktop/commit/7bfdd5868a2d42d1c4a12dbe82e667a59914ccd2))
+
 ## [2.3.1](https://github.com/nguyenhoangvannha/morphe-desktop/compare/v2.3.0...v2.3.1) (2026-11-13)
 
 
