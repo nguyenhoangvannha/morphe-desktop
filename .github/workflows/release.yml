@@ -12,6 +12,9 @@ jobs:
     name: Release
     permissions:
       contents: write
+      packages: read
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -21,6 +24,12 @@ jobs:
           # https://github.com/cycjimmy/semantic-release-action#private-packages
           persist-credentials: false
           fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: 'temurin'
+          java-version: '21'
 
       - name: Clean
         shell: bash
@@ -35,7 +44,7 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Import GPG key
         uses: crazy-max/ghaction-import-gpg@v7
@@ -45,6 +54,53 @@ jobs:
           fingerprint: ${{ vars.GPG_FINGERPRINT }}
 
       - name: Release
+        id: release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm exec semantic-release
+        run: node scripts/release.mjs
+
+  macos:
+    name: macOS app (${{ matrix.arch }})
+    needs: release
+    if: needs.release.outputs.tag != ''
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            arch: arm64
+          - os: macos-15-intel
+            arch: x64
+    runs-on: ${{ matrix.os }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      RELEASE_TAG: ${{ needs.release.outputs.tag }}
+    steps:
+      - name: Checkout packaging scripts
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          architecture: ${{ matrix.arch }}
+
+      - name: Download released JAR
+        run: |
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern "morphe-desktop-${RELEASE_TAG#v}-all.jar" --dir build/macos-input
+
+      - name: Package and verify macOS app
+        run: |
+          bash scripts/package-macos.sh "${RELEASE_TAG#v}" \
+            "build/macos-input/morphe-desktop-${RELEASE_TAG#v}-all.jar"
+
+      - name: Attach macOS app to release
+        run: |
+          gh release upload "$RELEASE_TAG" build/macos/*.app.zip \
+            --repo "$GITHUB_REPOSITORY" --clobber

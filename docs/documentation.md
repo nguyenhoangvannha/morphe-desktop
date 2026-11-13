@@ -1718,7 +1718,7 @@ This sets `stringKey` to the string `"1"` instead of the integer `1`.
 
 Want to build Morphe Desktop from source instead of grabbing a release? Here's how.
 
-**Requirements:** Java Development Kit 17 (e.g. [Azul Zulu](https://www.azul.com/downloads/?package=jdk#zulu) or [OpenJDK](https://jdk.java.net/archive/)).
+**Requirements:** Java Development Kit 21 (e.g. [Azul Zulu](https://www.azul.com/downloads/?package=jdk#zulu) or [OpenJDK](https://jdk.java.net/archive/)).
 
 1. Clone the repository:
 
@@ -1742,3 +1742,21 @@ Want to build Morphe Desktop from source instead of grabbing a release? Here's h
 > ```
 
 When the build finishes, the runnable JAR is at `build/libs/morphe-desktop-<version>-all.jar`.
+
+On macOS, package the JAR as an application with a bundled Java runtime:
+
+```bash
+export JAVA_HOME=$(/usr/libexec/java_home -v 21)
+bash scripts/package-macos.sh 2.2.0 build/libs/morphe-desktop-2.2.0-all.jar
+```
+
+Use your built version in place of `2.2.0`. The archive is written to
+`build/macos/morphe-desktop-<version>-macos-<arch>.app.zip` for the host architecture.
+Extract it and move `Morphe.app` to Applications. A separate Java installation is
+not needed to run the app; the first GUI launch still downloads its native libraries.
+These bundles are not signed with an Apple Developer certificate or notarized.
+
+The Release workflow publishes the JAR first, then packages and attaches separate
+Apple Silicon (`arm64`) and Intel (`x64`) app archives to that same release.
+If semantic-release finds no version-worthy commits, it skips both publishing and
+macOS packaging. Rerunning a successful no-op does not add assets to an older release.
