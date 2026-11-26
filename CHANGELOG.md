@@ -1,3 +1,10 @@
+# [2.6.0](https://github.com/nguyenhoangvannha/morphe-desktop/compare/v2.5.0...v2.6.0) (2026-11-26)
+
+
+### Features
+
+* keep add source dialog open, search by author, and show app icons ([bfe901a](https://github.com/nguyenhoangvannha/morphe-desktop/commit/bfe901ac9ac2115e5f098c0827a06517ad264ee3))
+
 # [2.5.0](https://github.com/nguyenhoangvannha/morphe-desktop/compare/v2.4.0...v2.5.0) (2026-11-26)
 
 
