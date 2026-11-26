@@ -39,6 +39,7 @@ import app.morphe.gui.data.repository.PatchSourceCatalogRepository
 import app.morphe.gui.data.repository.PatchSourceManager
 import app.morphe.gui.ui.icons.MorpheIcons
 import app.morphe.gui.ui.theme.MorpheTheme
+import app.morphe.gui.util.AppIconLoader
 import app.morphe.gui.util.AvatarLoader
 import app.morphe.gui.util.MorpheFilePicker
 import app.morphe.gui.util.PatchSourceNaming
@@ -216,6 +217,7 @@ internal fun AddPatchSourceDialog(
                                                     CatalogAppHeader(
                                                         group = group,
                                                         expanded = expanded,
+                                                        httpClient = httpClient,
                                                         onClick = { expandedApps[group.packageName] = !expanded },
                                                     )
                                                 }
@@ -335,6 +337,9 @@ internal fun AddPatchSourceDialog(
                                     deletable = true,
                                     usePreRelease = form.usePreRelease
                                 ))
+                                form.url = ""
+                                form.name = ""
+                                form.error = null
                                 return@MorpheDialogActions
                             }
                             AddSourceTab.LOCAL -> {
@@ -356,6 +361,9 @@ internal fun AddPatchSourceDialog(
                                         deletable = true,
                                         usePreRelease = form.usePreRelease
                                     ))
+                                    form.filePath = ""
+                                    form.name = ""
+                                    form.error = null
                                 }
                             }
                             else -> {}
@@ -371,8 +379,21 @@ internal fun AddPatchSourceDialog(
 private fun CatalogAppHeader(
     group: CatalogAppGroup,
     expanded: Boolean,
+    httpClient: HttpClient,
     onClick: () -> Unit,
 ) {
+    var iconBitmap by remember(group.packageName, group.iconUrl) {
+        mutableStateOf<ImageBitmap?>(group.iconUrl?.let(AvatarLoader::cachedAvatar))
+    }
+    LaunchedEffect(group.packageName, group.iconUrl) {
+        if (iconBitmap == null) {
+            val remoteIcon = group.iconUrl?.let { AvatarLoader.loadAvatar(it, httpClient) }
+            iconBitmap = remoteIcon ?: group.packageName?.let { pkg ->
+                AppIconLoader.savedIcon(pkg) ?: AppIconLoader.keptPlayStoreIcon(pkg)
+            }
+        }
+    }
+
     Surface(
         onClick = onClick,
         shape = MorpheTheme.shapes.small,
@@ -384,10 +405,19 @@ private fun CatalogAppHeader(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            MorpheAppAvatar(
-                name = group.name.ifBlank { stringResource(Res.string.patch_source_catalog_other_apps) },
-                size = MorpheAvatarSize.MEDIUM,
-            )
+            val bitmap = iconBitmap
+            if (bitmap != null) {
+                Image(
+                    bitmap = bitmap,
+                    contentDescription = null,
+                    modifier = Modifier.size(36.dp).clip(MorpheTheme.shapes.small),
+                )
+            } else {
+                MorpheAppAvatar(
+                    name = group.name.ifBlank { stringResource(Res.string.patch_source_catalog_other_apps) },
+                    size = MorpheAvatarSize.MEDIUM,
+                )
+            }
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
@@ -428,11 +458,11 @@ private fun CatalogBundleItem(
     httpClient: HttpClient,
     onAdd: () -> Unit,
 ) {
-    var avatarBitmap by remember(bundle.avatarUrl) { mutableStateOf<ImageBitmap?>(null) }
-    LaunchedEffect(bundle.avatarUrl) {
-        val url = bundle.avatarUrl
-        if (!url.isNullOrBlank()) {
-            avatarBitmap = AvatarLoader.loadAvatar(url, httpClient)
+    val iconUrl = bundle.avatarUrl ?: bundle.bundleIconUrl
+    var avatarBitmap by remember(iconUrl) { mutableStateOf<ImageBitmap?>(iconUrl?.let(AvatarLoader::cachedAvatar)) }
+    LaunchedEffect(iconUrl) {
+        if (avatarBitmap == null && !iconUrl.isNullOrBlank()) {
+            avatarBitmap = AvatarLoader.loadAvatar(iconUrl, httpClient)
         }
     }
 
@@ -500,8 +530,13 @@ private fun CatalogBundleItem(
                     }
                 }
 
+                val repoLabel = if (!bundle.author.isNullOrBlank()) {
+                    "${bundle.repo} · ${bundle.author}"
+                } else {
+                    bundle.repo
+                }
                 Text(
-                    text = bundle.repo,
+                    text = repoLabel,
                     style = MorpheTheme.typography.labelSmall,
                     color = colors.primary,
                     maxLines = 1,

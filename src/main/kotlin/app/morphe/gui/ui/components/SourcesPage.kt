@@ -239,7 +239,6 @@ fun SourcesPage(
             onDismiss = { showAddDialog = false },
             onAdd = {
                 onAdd(it)
-                showAddDialog = false
             },
         )
     }

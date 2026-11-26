@@ -191,7 +191,6 @@ fun HomeScreenContent(
         AddPatchSourceDialog(
             onDismiss = { showAddSourceDialog = false },
             onAdd = { source ->
-                showAddSourceDialog = false
                 coroutineScope.launch {
                     patchSourceManager.addSource(source)
                     viewModel.retryLoadPatches()

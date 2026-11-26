@@ -82,9 +82,11 @@ class PatchSourceCatalogRepository(
             }
         }
         val groups = grouped.map { (packageName, bundles) ->
+            val storeApp = catalog.store[packageName]
             CatalogAppGroup(
                 packageName = packageName,
-                name = catalog.store[packageName]?.name?.takeIf { it.isNotBlank() } ?: packageName.orEmpty(),
+                name = storeApp?.name?.takeIf { it.isNotBlank() } ?: packageName.orEmpty(),
+                iconUrl = storeApp?.iconUrl?.takeIf { it.isNotBlank() },
                 bundles = bundles,
             )
         }
@@ -93,8 +95,16 @@ class PatchSourceCatalogRepository(
             packageName != null && (name.contains(keyword, ignoreCase = true) ||
                 packageName.contains(keyword, ignoreCase = true))
 
-        // Once a term identifies an app, do not show sibling apps from a multi-app source.
-        val appKeywords = keywords.filter { keyword -> groups.any { it.matchesApp(keyword) } }
+        fun matchesAuthor(keyword: String): Boolean =
+            catalog.bundles.any { bundle ->
+                bundle.author?.contains(keyword, ignoreCase = true) == true ||
+                    bundle.repo.substringBefore('/').contains(keyword, ignoreCase = true)
+            }
+
+        // Once a term identifies an app (and not an author), do not show sibling apps from a multi-app source.
+        val appKeywords = keywords.filter { keyword ->
+            !matchesAuthor(keyword) && groups.any { it.matchesApp(keyword) }
+        }
         val sourceQuery = keywords.filterNot { it in appKeywords }.joinToString(" ")
         return groups.mapNotNull { group ->
             if (!appKeywords.all { group.matchesApp(it) }) return@mapNotNull null
@@ -143,8 +153,12 @@ class PatchSourceCatalogRepository(
             var score = bundle.stars
             val name = bundle.name.lowercase()
             val repo = bundle.repo.lowercase()
+            val author = (bundle.author ?: "").lowercase()
+            val owner = repo.substringBefore('/')
             if (name == trimmed) score += 10000
             else if (name.startsWith(trimmed)) score += 5000
+            else if (author == trimmed || owner == trimmed) score += 4000
+            else if (author.startsWith(trimmed) || owner.startsWith(trimmed)) score += 3000
             else if (repo.contains(trimmed)) score += 2000
             score
         }

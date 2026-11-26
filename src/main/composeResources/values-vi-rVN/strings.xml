@@ -641,7 +641,7 @@
     <!-- Patch Source Dialogs -->
     <string name="patch_source_catalog_tab">Danh mục</string>
     <string name="patch_source_custom_tab">Từ URL</string>
-    <string name="patch_source_catalog_search_placeholder">Tìm ứng dụng hoặc bản vá…</string>
+    <string name="patch_source_catalog_search_placeholder">Tìm ứng dụng, bản vá hoặc tác giả…</string>
     <string name="patch_source_catalog_loading">Đang tải danh mục nguồn…</string>
     <string name="patch_source_catalog_error">Không thể tải danh mục nguồn</string>
     <string name="patch_source_catalog_empty">Không tìm thấy ứng dụng hoặc nguồn phù hợp</string>
