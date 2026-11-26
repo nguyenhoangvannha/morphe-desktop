@@ -1,3 +1,10 @@
+# [2.7.0](https://github.com/nguyenhoangvannha/morphe-desktop/compare/v2.6.0...v2.7.0) (2026-11-26)
+
+
+### Features
+
+* show supported version, build code, and download link per patch source in apps tab ([fbf1b38](https://github.com/nguyenhoangvannha/morphe-desktop/commit/fbf1b3810303d7d869ecd294213fe75bf67bf260))
+
 # [2.6.0](https://github.com/nguyenhoangvannha/morphe-desktop/compare/v2.5.0...v2.6.0) (2026-11-26)
 
 
