@@ -37,6 +37,7 @@ import app.morphe.gui.ui.components.LocalSettingsState
 import app.morphe.gui.ui.components.MorpheErrorBar
 import app.morphe.gui.ui.components.SettingsPage
 import app.morphe.gui.ui.components.SourcesPage
+import app.morphe.gui.ui.screens.home.components.AppPatchSourceInfo
 import app.morphe.gui.ui.screens.home.components.ForgetConfirmDialog
 import app.morphe.gui.ui.screens.home.components.FullScreenDropZone
 import app.morphe.gui.ui.screens.home.components.HeaderBar
@@ -402,22 +403,38 @@ fun HomeScreenContent(
                 }
             }
 
-            // Map of package names to their providing patch sources.
-            val sourceNamesByPackage: Map<String, List<String>> = if (resolvedSnapshot == null) {
-                emptyMap()
-            } else {
-                val sourceIdToName = allSources.associate { it.id to it.name }
-                val accum = mutableMapOf<String, MutableList<String>>()
-                resolvedSnapshot.patchesBySource.forEach { (sourceId, patches) ->
-                    val name = sourceIdToName[sourceId] ?: return@forEach
-                    val packages = patches.flatMap { it.compatiblePackages.map { p -> p.name } }
-                        .filter { it.isNotBlank() }
-                        .toSet()
-                    packages.forEach { pkg ->
-                        accum.getOrPut(pkg) { mutableListOf() }.add(name)
+            // Map of package names to their providing patch sources and supported version/build/download info.
+            val sourceNamesByPackage: Map<String, List<AppPatchSourceInfo>> = remember(resolvedSnapshot, allSources) {
+                if (resolvedSnapshot == null) {
+                    emptyMap()
+                } else {
+                    val sourceIdToName = allSources.associate { it.id to it.name }
+                    val accum = mutableMapOf<String, MutableList<AppPatchSourceInfo>>()
+                    resolvedSnapshot.patchesBySource.forEach { (sourceId, patches) ->
+                        val name = sourceIdToName[sourceId] ?: return@forEach
+                        val appsFromSource = SupportedAppCatalog.extractSupportedAppsFromMetadata(patches)
+                        appsFromSource.forEach { sourceApp ->
+                            val version = sourceApp.recommendedVersion
+                                ?: sourceApp.supportedVersions.firstOrNull()
+                                ?: sourceApp.experimentalVersions.firstOrNull()
+                            val buildCodes = version?.let { sourceApp.requiredBuildCodes(it) }.orEmpty()
+                            val downloadUrl = when {
+                                version == null -> null
+                                version == sourceApp.recommendedVersion -> sourceApp.apkDownloadUrl ?: sourceApp.downloadUrl(version)
+                                else -> sourceApp.downloadUrl(version)
+                            }
+                            accum.getOrPut(sourceApp.packageName) { mutableListOf() }.add(
+                                AppPatchSourceInfo(
+                                    sourceName = name,
+                                    supportedVersion = version,
+                                    buildCodes = buildCodes,
+                                    downloadUrl = downloadUrl,
+                                )
+                            )
+                        }
                     }
+                    accum
                 }
-                accum
             }
             Box(modifier = Modifier.fillMaxSize()) {
                 Column(modifier = Modifier.fillMaxSize()) {

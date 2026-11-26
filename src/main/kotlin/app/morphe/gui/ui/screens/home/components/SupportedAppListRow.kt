@@ -41,6 +41,14 @@ import app.morphe.gui.ui.theme.ThemeStyle
 import app.morphe.morphe_desktop.generated.resources.*
 import org.jetbrains.compose.resources.stringResource
 
+/** Patch source compatibility summary for a single app in the Apps list. */
+data class AppPatchSourceInfo(
+    val sourceName: String,
+    val supportedVersion: String? = null,
+    val buildCodes: Set<Int> = emptySet(),
+    val downloadUrl: String? = null,
+)
+
 /** List row displaying a supported application with version chips and expandable details. */
 @Composable
 fun SupportedAppListRow(
@@ -48,8 +56,8 @@ fun SupportedAppListRow(
     onClick: () -> Unit = {},
     isExpanded: Boolean = false,
     isSimple: Boolean = false,
-    /** Display names of patch sources targeting this package. */
-    patchSourceNames: List<String> = emptyList(),
+    /** Patch sources targeting this package with their supported version, build codes, and download link. */
+    patchSources: List<AppPatchSourceInfo> = emptyList(),
     patchedState: PatchedAppState = PatchedAppState.NEVER_PATCHED,
     /** Device installation status and version information, if available. */
     deviceInfo: DeviceAppInfo? = null,
@@ -146,7 +154,7 @@ fun SupportedAppListRow(
             Column {
                 ExpandedBody(
                     app = app,
-                    patchSourceNames = patchSourceNames,
+                    patchSources = patchSources,
                     chipInk = chipInk,
                     isSimple = isSimple,
                 )
@@ -225,11 +233,12 @@ private fun VersionCardChip(
 @Composable
 private fun ExpandedBody(
     app: SupportedApp,
-    patchSourceNames: List<String>,
+    patchSources: List<AppPatchSourceInfo>,
     chipInk: Color,
     isSimple: Boolean = false,
 ) {
     val uriHandler = LocalUriHandler.current
+    val patchSourceHeader = LocalPatchSourceHeader.current
 
     Column(
         modifier = Modifier
@@ -237,14 +246,37 @@ private fun ExpandedBody(
             .padding(top = 6.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        if (patchSourceNames.isNotEmpty()) {
+        if (patchSources.isNotEmpty()) {
             SectionLabel(text = stringResource(Res.string.home_app_row_section_patches_from), color = chipInk)
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                patchSourceNames.forEach { name ->
-                    MorpheCardChip(text = name)
+                patchSources.forEach { info ->
+                    val versionLabel = info.supportedVersion?.let { v ->
+                        val base = if (v.startsWith("v")) v else "v$v"
+                        FormatUtils.formatVersionWithBuild(base, info.buildCodes)
+                    }
+                    val chipText = if (versionLabel != null) {
+                        "${info.sourceName} · $versionLabel"
+                    } else {
+                        info.sourceName
+                    }
+                    val tooltip = if (info.supportedVersion != null && info.buildCodes.size > 1) {
+                        "${info.sourceName} · ${info.supportedVersion} (${info.buildCodes.joinToString(", ")})"
+                    } else null
+                    MorpheCardChip(
+                        text = chipText,
+                        icon = if (info.downloadUrl != null) MorpheIcons.OpenInNew else null,
+                        tooltip = tooltip,
+                        onClick = info.downloadUrl?.let { url ->
+                            {
+                                openUrlAndFollowRedirects(url, patchSourceHeader(app.packageName)) { resolved ->
+                                    uriHandler.openUri(resolved)
+                                }
+                            }
+                        },
+                    )
                 }
             }
         }

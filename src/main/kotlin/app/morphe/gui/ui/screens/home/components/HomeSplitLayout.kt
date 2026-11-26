@@ -20,7 +20,7 @@ import app.morphe.gui.ui.screens.home.HomeUiState
 internal fun HomeSplitLayout(
     uiState: HomeUiState,
     padding: Dp,
-    sourceNamesByPackage: Map<String, List<String>>,
+    sourceNamesByPackage: Map<String, List<AppPatchSourceInfo>>,
     patchSourcesForSelectedApk: List<String>,
     patchesLoaded: Boolean,
     onSortModeChange: (HomeAppSortMode) -> Unit,

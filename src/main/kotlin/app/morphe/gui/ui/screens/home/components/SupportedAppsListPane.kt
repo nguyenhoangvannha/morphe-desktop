@@ -65,7 +65,7 @@ internal fun SupportedAppsListPane(
     onShowDetail: (PatchedAppRecord) -> Unit = {},
     filter: AppListFilter = AppListFilter.ALL,
     onFilterChange: (AppListFilter) -> Unit = {},
-    sourceNamesByPackage: Map<String, List<String>>,
+    sourceNamesByPackage: Map<String, List<AppPatchSourceInfo>>,
     isLoading: Boolean,
     loadError: String?,
     onRetry: () -> Unit,
@@ -273,7 +273,7 @@ internal fun SupportedAppsListPane(
                                     expandedPackage = if (expandedPackage == app.packageName) null
                                                       else app.packageName
                                 },
-                                patchSourceNames = sourceNamesByPackage[app.packageName] ?: emptyList(),
+                                patchSources = sourceNamesByPackage[app.packageName] ?: emptyList(),
                                 patchedState = patchedStates[app.packageName] ?: PatchedAppState.NEVER_PATCHED,
                                 deviceInfo = deviceAppInfo[app.packageName],
                                 icon = rememberAppIcon(
