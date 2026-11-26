@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -34,9 +33,9 @@ import app.morphe.gui.PatchingScreenRoute
 import app.morphe.gui.data.repository.PatchSourceManager
 import app.morphe.gui.navigateComplex
 import app.morphe.gui.ui.components.AddPatchSourceDialog
-import app.morphe.gui.ui.components.ChangelogDialog
+import app.morphe.gui.ui.components.LocalSettingsState
 import app.morphe.gui.ui.components.MorpheErrorBar
-import app.morphe.gui.ui.components.SourceManagementSheet
+import app.morphe.gui.ui.components.SettingsPage
 import app.morphe.gui.ui.components.SourcesPage
 import app.morphe.gui.ui.screens.home.components.ForgetConfirmDialog
 import app.morphe.gui.ui.screens.home.components.FullScreenDropZone
@@ -54,7 +53,7 @@ import app.morphe.gui.util.LocalPatchSourceHeader
 import app.morphe.gui.util.PatchException
 import app.morphe.gui.util.getUserMessage
 import app.morphe.gui.util.humanizePatchLoadError
-import app.morphe.gui.util.sourceChannelMap
+import app.morphe.gui.util.sourceDetailsMap
 import app.morphe.gui.util.sourceErrorMap
 import app.morphe.gui.util.sourceSignerChangedMap
 import app.morphe.gui.util.sourceSigningKeyFingerprintMap
@@ -64,9 +63,8 @@ import app.morphe.gui.util.sourceVersionMap
 import java.awt.Desktop
 import java.io.File
 import java.util.UUID
-import kotlin.time.Duration.Companion.milliseconds
+import kotlin.math.abs
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
@@ -99,19 +97,23 @@ fun HomeScreenContent(
     val pagerState = rememberPagerState(initialPage = uiState.selectedPage.ordinal) { HomePage.entries.size }
     val openPage: (HomePage) -> Unit = { page ->
         viewModel.selectPage(page)
-        coroutineScope.launch { pagerState.animateScrollToPage(page.ordinal) }
-    }
-    LaunchedEffect(pagerState.currentPage) {
-        viewModel.selectPage(HomePage.entries[pagerState.currentPage])
     }
     LaunchedEffect(uiState.selectedPage) {
-        if (pagerState.currentPage != uiState.selectedPage.ordinal) {
-            pagerState.animateScrollToPage(uiState.selectedPage.ordinal)
+        val target = uiState.selectedPage.ordinal
+        if (pagerState.currentPage != target) {
+            if (abs(target - pagerState.currentPage) > 1) {
+                pagerState.scrollToPage(if (target > pagerState.currentPage) target - 1 else target + 1)
+            }
+            pagerState.animateScrollToPage(target)
         }
     }
 
-    var showSourceManagementSheet by rememberSaveable { mutableStateOf(false) }
-    var pendingReopenSheet by rememberSaveable { mutableStateOf(false) }
+    val settingsState = LocalSettingsState.current
+    LaunchedEffect(settingsState.updateChannelRefreshTick) {
+        if (settingsState.updateChannelRefreshTick > 0) {
+            viewModel.refreshUpdateCheck()
+        }
+    }
 
     // Navigates to patch selection using resolved patch bundles.
     fun launchPatch(
@@ -198,10 +200,8 @@ fun HomeScreenContent(
         )
     }
 
-    var showChangelogDialog by remember { mutableStateOf(false) }
-    if (showChangelogDialog) {
-        ChangelogDialog(onDismiss = { showChangelogDialog = false })
-    }
+    var openChangelogToken by remember { mutableIntStateOf(0) }
+    var isChangelogOpen by remember { mutableStateOf(false) }
 
     detailRecord?.let { record ->
         val recordSources = remember(record, allSources) { viewModel.activePatchSourcesFor(record) }
@@ -290,79 +290,9 @@ fun HomeScreenContent(
         )
     }
 
-    // Delay sheet re-opening until transition completes to prevent visual flashing.
-    LaunchedEffect(Unit) {
-        if (pendingReopenSheet) {
-            delay(220.milliseconds)
-            showSourceManagementSheet = true
-            pendingReopenSheet = false
-        }
-    }
-
     val currentEntry by navController.currentBackStackEntryAsState()
     LaunchedEffect(currentEntry) {
         viewModel.refreshPatchesIfNeeded()
-    }
-
-    if (showSourceManagementSheet) {
-        val snapshot = viewModel.getResolvedSourcesSnapshot()
-        SourceManagementSheet(
-            sources = allSources,
-            sourceVersions = snapshot.sourceVersionMap(),
-            sourceChannels = snapshot.sourceChannelMap(),
-            sourceUpdates = snapshot.sourceUpdateMap(),
-            sourceErrors = snapshot.sourceErrorMap(),
-            sourceSigningKeyFingerprints = snapshot.sourceSigningKeyFingerprintMap(),
-            sourceSigningKeys = snapshot.sourceSigningKeyMap(),
-            sourceSignerChanged = snapshot.sourceSignerChangedMap(),
-            onTrustSigningKey = { sourceId, newKey ->
-                coroutineScope.launch {
-                    patchSourceManager.trustNewSigningKey(sourceId, newKey)
-                    viewModel.retryLoadPatches()
-                }
-            },
-            isLoading = uiState.isLoadingPatches,
-            onToggleEnabled = { id, enabled ->
-                coroutineScope.launch {
-                    patchSourceManager.setSourceEnabled(id, enabled)
-                    // Reload patches to update available apps and version badges.
-                    viewModel.retryLoadPatches()
-                }
-            },
-            onAdd = { source ->
-                coroutineScope.launch { patchSourceManager.addSource(source) }
-            },
-            onEdit = { updated ->
-                coroutineScope.launch {
-                    patchSourceManager.updateSource(updated)
-                    viewModel.retryLoadPatches(forceRefresh = true)
-                }
-            },
-            onRemove = { id ->
-                coroutineScope.launch { patchSourceManager.removeSource(id) }
-            },
-            onReorder = { orderedIds ->
-                coroutineScope.launch {
-                    patchSourceManager.reorderSources(orderedIds)
-                    // Reload patches to reflect updated source priority.
-                    viewModel.retryLoadPatches()
-                }
-            },
-            onOpenPatches = if (isSimple) null else { sourceId ->
-                // Hide sheet during transition and schedule reopen upon return.
-                showSourceManagementSheet = false
-                pendingReopenSheet = true
-                coroutineScope.launch {
-                    patchSourceManager.switchSource(sourceId)
-                    navController.navigate(PatchesScreenRoute(
-                        apkName = uiState.apkInfo?.appName ?: ""
-                    ))
-                }
-            },
-            onDismiss = { showSourceManagementSheet = false },
-            onRefresh = { viewModel.retryLoadPatches(forceRefresh = true) },
-            enabled = !uiState.isAnalyzing,
-        )
     }
 
     FullScreenDropZone(
@@ -422,6 +352,7 @@ fun HomeScreenContent(
                     suggestedVersion = resolution.suggestedVersion,
                     requiredBuildCodes = resolution.requiredBuildCodes,
                     isUnsupportedApp = app == null,
+                    formFactor = app?.formFactor ?: apk.formFactor,
                 )
             }
             val activeApkInfo = effectiveApkInfo ?: uiState.apkInfo
@@ -494,8 +425,7 @@ fun HomeScreenContent(
                     HeaderBar(
                         uiState = uiState,
                         onRetry = onRetry,
-                        onUpdateChannelChanged = { viewModel.refreshUpdateCheck() },
-                        selectedPage = HomePage.entries[pagerState.currentPage],
+                        selectedPage = uiState.selectedPage,
                         onSelectPage = openPage,
                     )
 
@@ -517,25 +447,43 @@ fun HomeScreenContent(
                             Column(modifier = Modifier.fillMaxSize()) {
                         HomeBanners(
                             uiState = uiState,
+                            hideUpdateBanner = isChangelogOpen && uiState.selectedPage == HomePage.SETTINGS,
+                            onDismissSourceUpdate = { viewModel.dismissSourceUpdateBanner() },
                             onDismissUpdateSession = { viewModel.dismissUpdateForSession() },
                             onDismissUpdateVersion = { viewModel.dismissUpdateForVersion() },
                             onDismissMultiSourceHint = { viewModel.dismissMultiSourceHint() },
                             onManageSources = { openPage(HomePage.SOURCES) },
                             onDismissSourcesFailed = { viewModel.dismissSourcesFailedBanner() },
-                            onShowChangelog = { showChangelogDialog = true },
+                            onShowChangelog = {
+                                isChangelogOpen = true
+                                openChangelogToken++
+                                openPage(HomePage.SETTINGS)
+                            },
                         )
                         HorizontalPager(
                             state = pagerState,
+                            userScrollEnabled = false,
                             modifier = Modifier.weight(1f).fillMaxWidth(),
                             key = { index -> HomePage.entries[index] }
                         ) { index ->
                             when (HomePage.entries[index]) {
                                 HomePage.SOURCES -> {
                                     val snapshot = viewModel.getResolvedSourcesSnapshot()
+                                    val details = remember(snapshot) { snapshot.sourceDetailsMap() }
+                                    val openSourceScreen: (String) -> Unit = { sourceId ->
+                                        coroutineScope.launch {
+                                            patchSourceManager.switchSource(sourceId)
+                                            navController.navigate(PatchesScreenRoute)
+                                        }
+                                    }
                                     SourcesPage(
                                         sources = allSources,
+                                        sourceDetails = details,
+                                        totalPatches = snapshot?.unionPatches?.size ?: 0,
+                                        totalApps = remember(details) { details.values.flatMap { d -> d.apps.map { it.packageName } }.toSet().size },
+                                        onChannelChange = { source, preRelease -> viewModel.setSourceChannel(source, preRelease) },
+                                        onFollowLatest = { source -> viewModel.followLatest(source) },
                                         sourceVersions = snapshot.sourceVersionMap(),
-                                        sourceChannels = snapshot.sourceChannelMap(),
                                         sourceUpdates = snapshot.sourceUpdateMap(),
                                         sourceErrors = snapshot.sourceErrorMap(),
                                         sourceSigningKeyFingerprints = snapshot.sourceSigningKeyFingerprintMap(),
@@ -548,10 +496,10 @@ fun HomeScreenContent(
                                             }
                                         },
                                         isLoading = uiState.isLoadingPatches,
+                                        reloadingSourceIds = uiState.reloadingSourceIds,
                                         onToggleEnabled = { id, enabled ->
                                             coroutineScope.launch {
                                                 patchSourceManager.setSourceEnabled(id, enabled)
-                                                viewModel.retryLoadPatches()
                                             }
                                         },
                                         onAdd = { source ->
@@ -569,17 +517,9 @@ fun HomeScreenContent(
                                         onReorder = { orderedIds ->
                                             coroutineScope.launch {
                                                 patchSourceManager.reorderSources(orderedIds)
-                                                viewModel.retryLoadPatches()
                                             }
                                         },
-                                        onOpenPatches = if (isSimple) null else { sourceId ->
-                                            coroutineScope.launch {
-                                                patchSourceManager.switchSource(sourceId)
-                                                navController.navigate(PatchesScreenRoute(
-                                                    apkName = uiState.apkInfo?.appName ?: ""
-                                                ))
-                                            }
-                                        },
+                                        onOpenPatches = if (isSimple) null else openSourceScreen,
                                         onRefresh = { viewModel.retryLoadPatches(forceRefresh = true) },
                                         enabled = !uiState.isAnalyzing,
                                         modifier = Modifier.fillMaxSize(),
@@ -608,6 +548,15 @@ fun HomeScreenContent(
                                         onChangeClick = onChangeClick,
                                         onContinueClick = onContinueClick,
                                         isSimple = isSimple,
+                                        modifier = Modifier.fillMaxSize(),
+                                    )
+                                }
+
+                                HomePage.SETTINGS -> {
+                                    SettingsPage(
+                                        showBackHeader = false,
+                                        openChangelogToken = openChangelogToken,
+                                        onChangelogVisibleChange = { isChangelogOpen = it },
                                         modifier = Modifier.fillMaxSize(),
                                     )
                                 }

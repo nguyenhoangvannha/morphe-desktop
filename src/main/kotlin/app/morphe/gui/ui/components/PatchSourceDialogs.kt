@@ -92,17 +92,11 @@ internal fun AddPatchSourceDialog(
         loadCatalog()
     }
 
-    MorpheAlertDialog(
-        onDismiss = onDismiss,
-        title = {
-            Text(
-                text = stringResource(Res.string.add_source),
-                style = MorpheTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-        },
+    MorpheDialog(
         maxWidth = 620.dp,
-        text = {
+        onDismiss = onDismiss,
+        title = stringResource(Res.string.add_source),
+        content = {
             Column(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxWidth()
@@ -279,22 +273,7 @@ internal fun AddPatchSourceDialog(
                                 placeholder = stringResource(Res.string.patch_source_dialog_repo_placeholder),
                                 modifier = Modifier.fillMaxWidth(),
                             )
-                            Text(
-                                text = stringResource(Res.string.patch_source_dialog_repo_hint),
-                                style = MorpheTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 4.dp),
-                            )
-                            val isPullRequest = RemotePatchSourceFactory.parse(form.url)?.provider == PatchProvider.GITHUB_PR
-                            if (!isPullRequest) {
-                                PatchSourceToggleRow(
-                                    title = stringResource(Res.string.patch_source_dialog_pre_release_title),
-                                    hint = stringResource(Res.string.patch_source_dialog_pre_release_hint),
-                                    checked = form.usePreRelease,
-                                    onCheckedChange = { form.usePreRelease = it },
-                                    modifier = Modifier.padding(top = 4.dp),
-                                )
-                            }
+                            RemoteUrlHint(form.url)
                         }
                     }
                     AddSourceTab.LOCAL -> {
@@ -323,18 +302,27 @@ internal fun AddPatchSourceDialog(
                 }
             }
         },
-        confirmButton = {
-            if (activeTab != AddSourceTab.CATALOG) {
+        actions = {
+            if (activeTab == AddSourceTab.CATALOG) {
+                MorpheButton(
+                    label = stringResource(Res.string.close),
+                    onClick = onDismiss,
+                    variant = MorpheButtonVariant.GHOST,
+                    size = MorpheButtonSize.COMPACT,
+                )
+            } else {
                 val errInvalidUrl = stringResource(Res.string.patch_source_dialog_error_invalid_url)
                 val errInvalidFile = stringResource(Res.string.patch_source_dialog_error_invalid_file)
-                MorpheButton(
-                    label = stringResource(Res.string.patch_source_dialog_add_button),
-                    onClick = {
+                MorpheDialogActions(
+                    confirmLabel = stringResource(Res.string.patch_source_dialog_add_button),
+                    onDismiss = onDismiss,
+                    onConfirm = {
                         when (activeTab) {
                             AddSourceTab.REMOTE -> {
+                                // Resolve actual provider (GitHub vs GitLab) from the entered URL.
                                 val resolved = resolveRemoteSourceUrl(form.url.trim())
                                 if (resolved == null) {
-                                    form.error = errInvalidUrl; return@MorpheButton
+                                    form.error = errInvalidUrl; return@MorpheDialogActions
                                 }
                                 val resolvedName = form.name.trim().ifBlank {
                                     PatchSourceNaming.suggestNameFromUrl(form.url.trim()) ?: "Unnamed"
@@ -347,11 +335,11 @@ internal fun AddPatchSourceDialog(
                                     deletable = true,
                                     usePreRelease = form.usePreRelease
                                 ))
-                                return@MorpheButton
+                                return@MorpheDialogActions
                             }
                             AddSourceTab.LOCAL -> {
                                 if (form.filePath.isBlank() || !File(form.filePath).exists()) {
-                                    form.error = errInvalidFile; return@MorpheButton
+                                    form.error = errInvalidFile; return@MorpheDialogActions
                                 }
                                 val localFile = File(form.filePath)
                                 scope.launch {
@@ -373,18 +361,8 @@ internal fun AddPatchSourceDialog(
                             else -> {}
                         }
                     },
-                    variant = MorpheButtonVariant.PRIMARY,
-                    size = MorpheButtonSize.COMPACT,
                 )
             }
-        },
-        dismissButton = {
-            MorpheButton(
-                label = stringResource(if (activeTab == AddSourceTab.CATALOG) Res.string.close else Res.string.cancel),
-                onClick = onDismiss,
-                variant = MorpheButtonVariant.GHOST,
-                size = MorpheButtonSize.COMPACT,
-            )
         }
     )
 }
@@ -591,7 +569,7 @@ private fun isBundleAdded(bundle: CatalogBundle, existingSources: List<PatchSour
 internal fun EditPatchSourceDialog(
     source: PatchSource,
     onDismiss: () -> Unit,
-    onSave: (PatchSource) -> Unit
+    onSave: (PatchSource) -> Unit,
 ) {
     val form = remember(source) {
         PatchSourceFormState(
@@ -607,16 +585,11 @@ internal fun EditPatchSourceDialog(
     val developerOptions = localConfig.developerOptions
     val lastLocalPatchDir = localConfig.lastLocalPatchDir
 
-    MorpheAlertDialog(
+    MorpheDialog(
+        maxWidth = MorpheDialogMaxWidth,
         onDismiss = onDismiss,
-        title = {
-            Text(
-                text = stringResource(Res.string.patch_source_dialog_edit_title),
-                style = MorpheTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-        },
-        text = {
+        title = stringResource(Res.string.patch_source_dialog_edit_title),
+        content = {
             Column(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.widthIn(min = 300.dp)
@@ -653,6 +626,7 @@ internal fun EditPatchSourceDialog(
                                     placeholder = stringResource(Res.string.patch_source_dialog_repo_placeholder),
                                     modifier = Modifier.fillMaxWidth(),
                                 )
+                                RemoteUrlHint(form.url)
                             }
                         }
                         PatchSourceType.LOCAL -> {
@@ -671,15 +645,8 @@ internal fun EditPatchSourceDialog(
                     }
                 }
 
-                if (source.type != PatchSourceType.LOCAL) {
-                    if (!isPullRequest) {
-                        PatchSourceToggleRow(
-                            title = stringResource(Res.string.patch_source_dialog_pre_release_title),
-                            hint = stringResource(Res.string.patch_source_dialog_pre_release_hint),
-                            checked = form.usePreRelease,
-                            onCheckedChange = { form.usePreRelease = it },
-                        )
-                    }
+                if (!source.deletable) {
+                    MorpheDialogText(stringResource(Res.string.patch_source_dialog_builtin_note))
                 }
 
                 form.error?.let {
@@ -691,20 +658,21 @@ internal fun EditPatchSourceDialog(
                 }
             }
         },
-        confirmButton = {
+        actions = {
             val errNameRequired = stringResource(Res.string.patch_source_dialog_error_name_required)
             val errInvalidUrl = stringResource(Res.string.patch_source_dialog_error_invalid_url)
             val errInvalidFile = stringResource(Res.string.patch_source_dialog_error_invalid_file)
-            MorpheButton(
-                label = stringResource(Res.string.save),
-                onClick = {
-                    if (form.name.isBlank()) { form.error = errNameRequired; return@MorpheButton }
+            MorpheDialogActions(
+                confirmLabel = stringResource(Res.string.save),
+                onDismiss = onDismiss,
+                onConfirm = {
+                    if (form.name.isBlank()) { form.error = errNameRequired; return@MorpheDialogActions }
                     when (source.type) {
                         PatchSourceType.GITHUB, PatchSourceType.GITLAB -> {
                             // Re-resolve provider from URL in case the host was edited.
                             val resolved = resolveRemoteSourceUrl(form.url.trim())
                             if (resolved == null) {
-                                form.error = errInvalidUrl; return@MorpheButton
+                                form.error = errInvalidUrl; return@MorpheDialogActions
                             }
                             onSave(source.copy(
                                 name = form.name.trim(),
@@ -712,11 +680,11 @@ internal fun EditPatchSourceDialog(
                                 url = resolved.canonicalUrl,
                                 usePreRelease = form.usePreRelease
                             ))
-                            return@MorpheButton
+                            return@MorpheDialogActions
                         }
                         PatchSourceType.LOCAL -> {
                             if (form.filePath.isBlank() || !File(form.filePath).exists()) {
-                                form.error = errInvalidFile; return@MorpheButton
+                                form.error = errInvalidFile; return@MorpheDialogActions
                             }
                         }
                         else -> {}
@@ -727,19 +695,35 @@ internal fun EditPatchSourceDialog(
                         usePreRelease = form.usePreRelease
                     ))
                 },
-                variant = MorpheButtonVariant.PRIMARY,
-                size = MorpheButtonSize.COMPACT,
             )
         },
-        dismissButton = {
-            MorpheButton(
-                label = stringResource(Res.string.cancel),
-                onClick = onDismiss,
-                variant = MorpheButtonVariant.GHOST,
-                size = MorpheButtonSize.COMPACT,
-            )
-        }
     )
+}
+
+@Composable
+private fun RemoteUrlHint(url: String) {
+    val colors = MorpheTheme.colors
+    val trimmed = url.trim()
+    val parsed = trimmed.takeIf { it.isNotEmpty() }?.let(RemotePatchSourceFactory::parse)
+    val (text, color, icon) = when {
+        trimmed.isEmpty() -> Triple(stringResource(Res.string.patch_source_dialog_repo_hint), MaterialTheme.colorScheme.onSurfaceVariant, null)
+        parsed == null -> Triple(stringResource(Res.string.patch_source_dialog_error_invalid_url), colors.danger, MorpheIcons.Error)
+        parsed.provider == PatchProvider.GITHUB_PR -> Triple(
+            stringResource(Res.string.patch_source_dialog_valid_pr, parsed.prNumber.orEmpty(), parsed.repoPath.substringBefore("/pull/")),
+            colors.secondary,
+            MorpheIcons.Check,
+        )
+        parsed.provider == PatchProvider.GITLAB -> Triple(stringResource(Res.string.patch_source_dialog_valid_gitlab), colors.secondary, MorpheIcons.Check)
+        else -> Triple(stringResource(Res.string.patch_source_dialog_valid_github), colors.secondary, MorpheIcons.Check)
+    }
+    Row(
+        modifier = Modifier.padding(top = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        if (icon != null) Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(13.dp))
+        Text(text = text, style = MorpheTheme.typography.labelSmall, color = color)
+    }
 }
 
 /** Parsed remote source details with canonical URL and provider type. */
@@ -851,39 +835,6 @@ private fun rememberLocalSourceConfig(engineConfigRepository: EngineConfigReposi
         developerOptions = config?.developerOptions ?: false,
         lastLocalPatchDir = config?.lastLocalPatchDir,
     )
-}
-
-@Composable
-private fun PatchSourceToggleRow(
-    title: String,
-    hint: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
-            Text(
-                text = title,
-                style = MorpheTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Text(
-                text = hint,
-                style = MorpheTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        MorpheSwitch(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-            accentColor = MorpheTheme.colors.primary,
-        )
-    }
 }
 
 private class PatchSourceFormState(

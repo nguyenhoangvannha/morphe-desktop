@@ -60,4 +60,32 @@
         <item quantity="one">%1$d оновчлол</item>
         <item quantity="other">%1$d оновчлол</item>
     </plurals>
+    <plurals name="settings_cache_category_summary">
+        <item quantity="one">%1$s (%2$d файл)</item>
+        <item quantity="other">%1$s (%2$d файл)</item>
+    </plurals>
+    <plurals name="settings_cache_clear_all_summary">
+        <item quantity="one">Нийт: %1$s (%2$d файл)</item>
+        <item quantity="other">Нийт: %1$s (%2$d файл)</item>
+    </plurals>
+    <plurals name="versions_newer_than">
+        <item quantity="one">%1$d хувилбар шинээр гарсан</item>
+        <item quantity="other">%1$d хувилбар шинээр гарсан</item>
+    </plurals>
+    <plurals name="versions_older_than">
+        <item quantity="one">%1$d хувилбар хуучин</item>
+        <item quantity="other">%1$d хувилбар хуучин</item>
+    </plurals>
+    <plurals name="versions_patch_count">
+        <item quantity="one">%1$d нөхөж засвар</item>
+        <item quantity="other">%1$d нөхөж засвар</item>
+    </plurals>
+    <plurals name="versions_app_count">
+        <item quantity="one">%1$d апп</item>
+        <item quantity="other">%1$d апп</item>
+    </plurals>
+    <plurals name="versions_option_count">
+        <item quantity="one">%1$d сонголт</item>
+        <item quantity="other">%1$d сонголт</item>
+    </plurals>
 </resources>
